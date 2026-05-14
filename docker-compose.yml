@@ -1,0 +1,125 @@
+services:
+  php:
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    container_name: php-project_name
+    restart: unless-stopped
+    working_dir: /var/www/html/project_name
+
+    volumes:
+      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
+      -  /home/innovative/project_name/src/web_app/storage:/var/www/html/project_name/storage
+      -  /home/innovative/project_name/src/web_app/bootstrap/cache:/var/www/html/project_name/bootstrap/cache
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    tmpfs:
+      - /tmp
+      - /run
+
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+    networks:
+      - laravel
+      - shared-web
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  composer:
+    build:
+      context: ./dockerfiles
+      dockerfile: composer.dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    container_name: composer-project_name
+    volumes:
+      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
+    working_dir: /var/www/html/project_name
+    depends_on:
+      - php
+    user: laravel
+    entrypoint: ["composer"]
+    networks:
+      - laravel
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  npm:
+    image: node:13.7
+    container_name: npm-project_name
+    user: "1000:1000"
+    volumes:
+      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
+    working_dir: /var/www/html/project_name
+    entrypoint: ["npm"]
+    networks:
+      - laravel
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  artisan:
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    container_name: artisan-project_name
+    volumes:
+      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
+      -  /home/innovative/project_name/src/web_app/storage:/var/www/html/project_name/storage
+      -  /home/innovative/project_name/src/web_app/bootstrap/cache:/var/www/html/project_name/bootstrap/cache
+    working_dir: /var/www/html/project_name
+    entrypoint: ["php", "/var/www/html/project_name/artisan"]
+    networks:
+      - laravel
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  laravel:
+  shared-web:
+    external: true
