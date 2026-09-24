@@ -1,6 +1,5 @@
-## This is where your Laravel app goes
+## Laravel application source
 
-To get started, **delete this file** and then do one of the following:
+For local development, place the Laravel application in `src/imis-revamp2.0`, or update the Compose volume paths to match your application directory.
 
-- Clone your project or copy all of the files directly into this `src` directory.
-- Spin up the Docker network by following the instructions on the main [README.md](../README.md), and install a brand new Laravel project by running `docker-compose run --rm composer create-project laravel/laravel .` in your terminal.
+For server deployment, the Ansible playbook clones the application into `src/<project-name>-<repository-name>` and updates the Docker paths automatically. The application must contain `artisan`, `composer.json`, and `.env.example`.
