@@ -1,80 +1,113 @@
 networks:
-  laravel:
+  app_shared_network:
+    external: true
+    name: ${SHARED_WEB_NETWORK:-${PROJECT_NAME:?PROJECT_NAME must be set}_shared-web}
+
+  app_database_network:
+    external: true
+    name: ${POSTGRES_NETWORK:-${PROJECT_NAME:?PROJECT_NAME must be set}_postgres14_backend}
 
 services:
+  site:
+    build:
+      context: ./dockerfiles
+      dockerfile: nginx.dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: nginx-${PROJECT_NAME:?PROJECT_NAME must be set}
+    tty: true
+    volumes:
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
+    depends_on:
+      - php
+    networks:
+      - app_shared_network
+
   php:
     build:
       context: ./dockerfiles
       dockerfile: php.dockerfile
       args:
-        - UID=${UID:-1000}
-        - GID=${GID:-1000}
-    container_name: php-imis
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: php-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      - ./src/imis-revamp2.0:/var/www/html/imis:delegated
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
     networks:
-      - laravel
-
-  queue-worker:
-    build:
-      context: ./dockerfiles
-      dockerfile: php.dockerfile
-      args:
-        - UID=${UID:-1000}
-        - GID=${GID:-1000}
-    container_name: queue-worker-imis
-    command: php artisan queue:work --sleep=3 --tries=3
-    volumes:
-      - ./src/imis-revamp2.0:/var/www/html/imis:delegated
-    working_dir: /var/www/html/imis
-    restart: always
-    depends_on:
-      - php
-    networks:
-      - laravel
+      - app_shared_network
+      - app_database_network
 
   composer:
     build:
       context: ./dockerfiles
       dockerfile: composer.dockerfile
       args:
-        - UID=${UID:-1000}
-        - GID=${GID:-1000}
-    container_name: composer-imis
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: composer-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      - ./src/imis-revamp2.0:/var/www/html/imis
-    working_dir: /var/www/html/imis
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}
+    working_dir: /var/www/html/${PROJECT_NAME}
     depends_on:
       - php
     user: laravel
-    entrypoint: ['composer']
+    entrypoint:
+      - composer
     networks:
-      - laravel
+      - app_shared_network
 
   npm:
     image: node:13.7
-    container_name: npm-imis
+    container_name: npm-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      - ./src/imis-revamp2.0:/var/www/html/imis
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}
     ports:
-      - 3000:3000
-      - 3001:3001
-    working_dir: /var/www/html/imis
-    entrypoint: ['npm']
+      - "3000:3000"
+      - "3001:3001"
+    working_dir: /var/www/html/${PROJECT_NAME}
+    entrypoint:
+      - npm
     networks:
-      - laravel
+      - app_shared_network
 
   artisan:
     build:
       context: ./dockerfiles
       dockerfile: php.dockerfile
       args:
-        - UID=${UID:-1000}
-        - GID=${GID:-1000}
-    container_name: artisan-imis
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: artisan-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      - ./src/imis-revamp2.0:/var/www/html/imis:delegated
-    working_dir: /var/www/html/imis
-    entrypoint: ['php', '/var/www/html/imis/artisan']
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
+    working_dir: /var/www/html/${PROJECT_NAME}
+    entrypoint:
+      - php
+      - /var/www/html/${PROJECT_NAME}/artisan
     networks:
-      - laravel
+      - app_shared_network
+
+  queue-worker:
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: queue-worker-${PROJECT_NAME:?PROJECT_NAME must be set}
+    command: php artisan queue:work --sleep=3 --tries=3
+    volumes:
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
+    working_dir: /var/www/html/${PROJECT_NAME}
+    restart: always
+    depends_on:
+      - php
+    networks:
+      - app_shared_network
+      - app_database_network

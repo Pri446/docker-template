@@ -1,17 +1,61 @@
-FROM composer:2
+FROM composer:2 AS composer_source
 
-ARG UID
-ARG GID
+FROM php:8.2.35-cli-bookworm
+
+ARG UID=1000
+ARG GID=1000
+ARG PROJECT_NAME
 
 ENV UID=${UID}
 ENV GID=${GID}
+ENV APP_PATH=/var/www/html/${PROJECT_NAME}
 
-# MacOS staff group's gid is 20, so is the dialout group in alpine linux. We're not using it, let's just remove it.
-RUN delgroup dialout
+COPY --from=composer_source /usr/bin/composer /usr/local/bin/composer
 
-RUN addgroup -g ${GID} --system laravel
-RUN adduser -G laravel --system -D -s /bin/sh -u ${UID} laravel
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+        unzip \
+        libpq-dev \
+        libonig-dev \
+        libxml2-dev \
+        libzip-dev \
+        libcurl4-openssl-dev \
+        libpng-dev \
+        libjpeg62-turbo-dev \
+        libwebp-dev \
+        libfreetype6-dev \
+    && docker-php-ext-configure gd \
+        --with-freetype \
+        --with-jpeg \
+        --with-webp \
+    && docker-php-ext-install -j"$(nproc)" \
+        curl \
+        pdo_mysql \
+        pdo_pgsql \
+        pgsql \
+        mbstring \
+        xml \
+        zip \
+        gd \
+        exif \
+        bcmath \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN apk add libpng libpng-dev libjpeg-turbo-dev libwebp-dev zlib-dev libxpm-dev gd && docker-php-ext-install gd
+RUN groupadd --system --gid "${GID}" laravel \
+    && useradd --system \
+        --uid "${UID}" \
+        --gid "${GID}" \
+        --shell /bin/sh \
+        --create-home \
+        laravel
 
-WORKDIR /var/www/html/imis
+WORKDIR ${APP_PATH}
+
+RUN chown -R laravel:laravel ${APP_PATH}
+
+USER laravel
+RUN git config --global --add safe.directory ${APP_PATH}
+ENTRYPOINT ["composer"]
