@@ -1,70 +1,81 @@
-FROM php:8.4-fpm-alpine
+FROM php:8.2.35-fpm-bookworm
 
 ARG UID=1000
 ARG GID=1000
+ARG PROJECT_NAME
 
 ENV UID=${UID}
 ENV GID=${GID}
+ENV APP_PATH=/var/www/html/${PROJECT_NAME}
 
 COPY ./php/php.ini /usr/local/etc/php/php.ini
 
-RUN mkdir -p /var/www/html/project_name
+WORKDIR ${APP_PATH}
 
-WORKDIR /var/www/html/project_name
-
-RUN set -ex \
-    && apk update \
-    && apk upgrade --no-cache \
-    && apk add --no-cache \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
         curl \
-        postgresql-dev \
-        oniguruma-dev \
+        libcurl4-openssl-dev \
+        libpq-dev \
+        libonig-dev \
         libxml2-dev \
         libpng-dev \
-        libjpeg-turbo-dev \
+        libjpeg62-turbo-dev \
         libwebp-dev \
-        zlib-dev \
         libxpm-dev \
-        libxrender \
-        libxext \
+        libfreetype6-dev \
+        libzip-dev \
+        libxrender1 \
+        libxext6 \
         fontconfig \
-    && docker-php-ext-configure gd --with-jpeg --with-webp \
-    && docker-php-ext-install \
-        pdo \
+        wkhtmltopdf \
+        xvfb \
+        fonts-dejavu \
+        fonts-freefont-ttf \
+        fonts-liberation \
+    && docker-php-ext-configure gd \
+        --with-freetype \
+        --with-jpeg \
+        --with-webp \
+    && docker-php-ext-install -j"$(nproc)" \
+        curl \
         pdo_mysql \
         pdo_pgsql \
         pgsql \
         mbstring \
+        xml \
+        zip \
+        gd \
         exif \
         pcntl \
         bcmath \
-        gd \
         opcache \
-    && rm -rf /var/cache/apk/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN delgroup dialout || true
+RUN groupadd --system --gid "${GID}" laravel \
+    && useradd --system \
+        --uid "${UID}" \
+        --gid "${GID}" \
+        --shell /bin/sh \
+        --create-home \
+        laravel
 
-RUN addgroup -g ${GID} --system laravel \
-    && adduser -G laravel --system -D -s /bin/sh -u ${UID} laravel
-
-COPY ./php/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
+RUN sed -i 's/^user = .*/user = laravel/' /usr/local/etc/php-fpm.d/www.conf \
+    && sed -i 's/^group = .*/group = laravel/' /usr/local/etc/php-fpm.d/www.conf \
+    && echo 'php_admin_flag[log_errors] = on' >> /usr/local/etc/php-fpm.d/www.conf
 
 RUN mkdir -p \
-        /var/www/html/project_name/storage \
-        /var/www/html/project_name/bootstrap/cache \
-        /var/log/php \
-        /run \
+        ${APP_PATH}/storage \
+        ${APP_PATH}/bootstrap/cache \
+        /run/php \
     && chown -R laravel:laravel \
-        /var/www/html/project_name/storage \
-        /var/www/html/project_name/bootstrap/cache \
-        /var/log/php \
-        /run
+        ${APP_PATH} \
+        /run/php
 
 USER laravel
 
 EXPOSE 9000
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD php-fpm -t || exit 1
-
-CMD ["php-fpm"]
+CMD ["php-fpm", "-F"]

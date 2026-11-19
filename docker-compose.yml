@@ -1,125 +1,113 @@
+networks:
+  app_shared_network:
+    external: true
+    name: ${SHARED_WEB_NETWORK:-${PROJECT_NAME:?PROJECT_NAME must be set}_shared-web}
+
+  app_database_network:
+    external: true
+    name: ${POSTGRES_NETWORK:-${PROJECT_NAME:?PROJECT_NAME must be set}_postgres14_backend}
+
 services:
+  site:
+    build:
+      context: ./dockerfiles
+      dockerfile: nginx.dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: nginx-${PROJECT_NAME:?PROJECT_NAME must be set}
+    tty: true
+    volumes:
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
+    depends_on:
+      - php
+    networks:
+      - app_shared_network
+
   php:
     build:
       context: ./dockerfiles
       dockerfile: php.dockerfile
       args:
-        - UID=${UID:-1000}
-        - GID=${GID:-1000}
-    container_name: php-project_name
-    restart: unless-stopped
-    working_dir: /var/www/html/project_name
-
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: php-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
-      -  /home/innovative/project_name/src/web_app/storage:/var/www/html/project_name/storage
-      -  /home/innovative/project_name/src/web_app/bootstrap/cache:/var/www/html/project_name/bootstrap/cache
-
-    security_opt:
-      - no-new-privileges:true
-
-    cap_drop:
-      - ALL
-
-    tmpfs:
-      - /tmp
-      - /run
-
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
     networks:
-      - laravel
-      - shared-web
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - app_shared_network
+      - app_database_network
 
   composer:
     build:
       context: ./dockerfiles
       dockerfile: composer.dockerfile
       args:
-        - UID=${UID:-1000}
-        - GID=${GID:-1000}
-    container_name: composer-project_name
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: composer-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
-    working_dir: /var/www/html/project_name
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}
+    working_dir: /var/www/html/${PROJECT_NAME}
     depends_on:
       - php
     user: laravel
-    entrypoint: ["composer"]
+    entrypoint:
+      - composer
     networks:
-      - laravel
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    tmpfs:
-      - /tmp
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - app_shared_network
 
   npm:
-    image: node:13.7
-    container_name: npm-project_name
-    user: "1000:1000"
+    image: node:22-bookworm-slim
+    container_name: npm-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
-    working_dir: /var/www/html/project_name
-    entrypoint: ["npm"]
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    working_dir: /var/www/html/${PROJECT_NAME}
+    entrypoint:
+      - npm
     networks:
-      - laravel
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    tmpfs:
-      - /tmp
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - app_shared_network
 
   artisan:
     build:
       context: ./dockerfiles
       dockerfile: php.dockerfile
       args:
-        - UID=${UID:-1000}
-        - GID=${GID:-1000}
-    container_name: artisan-project_name
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: artisan-${PROJECT_NAME:?PROJECT_NAME must be set}
     volumes:
-      -  /home/innovative/project_name/src/web_app:/var/www/html/project_name
-      -  /home/innovative/project_name/src/web_app/storage:/var/www/html/project_name/storage
-      -  /home/innovative/project_name/src/web_app/bootstrap/cache:/var/www/html/project_name/bootstrap/cache
-    working_dir: /var/www/html/project_name
-    entrypoint: ["php", "/var/www/html/project_name/artisan"]
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
+    working_dir: /var/www/html/${PROJECT_NAME}
+    entrypoint:
+      - php
+      - /var/www/html/${PROJECT_NAME}/artisan
     networks:
-      - laravel
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    tmpfs:
-      - /tmp
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - app_shared_network
 
-networks:
-  laravel:
-  shared-web:
-    external: true
+  queue-worker:
+    build:
+      context: ./dockerfiles
+      dockerfile: php.dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        PROJECT_NAME: ${PROJECT_NAME:?PROJECT_NAME must be set}
+    container_name: queue-worker-${PROJECT_NAME:?PROJECT_NAME must be set}
+    command: php artisan queue:work --once --sleep=3 --tries=3
+    volumes:
+      - ${APP_SOURCE_PATH:?APP_SOURCE_PATH must be set}:/var/www/html/${PROJECT_NAME}:delegated
+    working_dir: /var/www/html/${PROJECT_NAME}
+    restart: "no"
+    depends_on:
+      - php
+    networks:
+      - app_shared_network
+      - app_database_network
